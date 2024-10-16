@@ -13,6 +13,7 @@ import io.dropwizard.jdbi3.JdbiFactory;
 import io.dropwizard.setup.Environment;
 import javax.sql.DataSource;
 import lombok.extern.slf4j.Slf4j;
+import marquez.db.*;
 import marquez.db.migrations.V57_1__BackfillFacets;
 import net.sourceforge.argparse4j.inf.Namespace;
 import net.sourceforge.argparse4j.inf.Subparser;
@@ -20,6 +21,8 @@ import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.jackson2.Jackson2Plugin;
 import org.jdbi.v3.postgres.PostgresPlugin;
 import org.jdbi.v3.sqlobject.SqlObjectPlugin;
+
+import java.util.*;
 
 /**
  * A command to manually run database migrations when needed. This migration requires a heavy DB
@@ -39,7 +42,7 @@ public class DbMigrationCommand<MarquezConfig> extends EnvironmentCommand<marque
   private static final String COMMAND_DESCRIPTION =
       """
         A command to manually run database migrations.
-        Extra parameters are required to specify the migration to run.
+        Extra parameters can be added to specify an individual migration to run.
         """;
 
   /**
@@ -65,8 +68,8 @@ public class DbMigrationCommand<MarquezConfig> extends EnvironmentCommand<marque
         .addArgument("--version")
         .dest("version")
         .type(String.class)
-        .required(true)
-        .help("migration version to apply like 'v57'");
+        .required(false)
+        .help("specific migration version to apply like 'v57'; if omitted, all pending migrations will be run");
 
     addFileArgument(subparser);
   }
@@ -91,7 +94,12 @@ public class DbMigrationCommand<MarquezConfig> extends EnvironmentCommand<marque
             .installPlugin(new PostgresPlugin())
             .installPlugin(new Jackson2Plugin());
 
-    MarquezMigrations.valueOf(namespace.getString("version")).run(jdbi, namespace);
+    String version = namespace.getString("version");
+    if (version != null) {
+      MarquezMigrations.valueOf(version).run(jdbi, namespace);
+    } else {
+      DbMigration.migrateDbOrError(configuration.getFlywayFactory(), source, true);
+    }
   }
 
   enum MarquezMigrations {
